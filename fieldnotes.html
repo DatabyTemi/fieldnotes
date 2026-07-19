@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fieldnotes — a data analysis notebook</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EFF2EA;
+    --paper:#FBFBF8;
+    --grid:#D7DECE;
+    --ink:#1B231F;
+    --ink-soft:#495650;
+    --rule:#C8D0C0;
+    --primary:#1F4B3F;
+    --primary-soft:#E4EDE7;
+    --accent:#2F6F9E;
+    --accent-soft:#E2ECF3;
+    --brick:#A8412F;
+    --brick-soft:#F5E4E0;
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0/24px 24px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/24px 24px,
+      var(--bg);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    font-size:15px;
+    line-height:1.5;
+    min-height:100vh;
+  }
+  h1,h2,h3,.display{font-family:'Newsreader', serif;}
+  .app{display:flex; min-height:100vh;}
+  /* ---------- RAIL ---------- */
+  .rail{
+    width:230px; flex:none;
+    background:var(--primary); color:#EEF3EF;
+    padding:28px 20px;
+    position:sticky; top:0; height:100vh;
+  }
+  .rail .brand{font-family:'Newsreader', serif; font-size:26px; font-style:italic; margin:0 0 4px 0;}
+  .rail .tagline{font-size:12px; opacity:.72; margin:0 0 32px 0; letter-spacing:.02em;}
+  .rail-step{
+    display:flex; gap:12px; align-items:flex-start;
+    padding:11px 0; border-top:1px solid rgba(255,255,255,.14);
+    cursor:pointer; opacity:.55; transition:opacity .15s;
+  }
+  .rail-step:first-of-type{border-top:1px solid rgba(255,255,255,.14);}
+  .rail-step.active, .rail-step.done{opacity:1;}
+  .rail-step .num{font-family:'IBM Plex Mono', monospace; font-size:12px; padding-top:2px;}
+  .rail-step .label{font-size:13.5px;}
+  .rail-step .sub{font-size:11px; opacity:.7; margin-top:2px;}
+  .rail-foot{position:absolute; bottom:22px; font-size:11px; opacity:.55; width:190px;}
+
+  /* ---------- STAGE ---------- */
+  .stage{flex:1; padding:38px 48px 80px; max-width:980px;}
+  .panel{display:none;}
+  .panel.active{display:block; animation:rise .25s ease;}
+  @keyframes rise{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+  .eyebrow{font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); margin:0 0 6px;}
+  .panel h2{font-size:30px; margin:0 0 6px; font-weight:500;}
+  .panel > p.lede{color:var(--ink-soft); max-width:60ch; margin:0 0 28px;}
+
+  /* Dropzone */
+  .dropzone{
+    border:1.5px dashed var(--rule); border-radius:var(--radius);
+    background:var(--paper);
+    padding:42px 24px; text-align:center; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .dropzone:hover, .dropzone.hover{border-color:var(--accent); background:var(--accent-soft);}
+  .dropzone .dz-icon{font-family:'IBM Plex Mono', monospace; font-size:28px; color:var(--accent); margin-bottom:8px;}
+  .dropzone .dz-main{font-size:15px; font-weight:500;}
+  .dropzone .dz-sub{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
+  input[type=file]{display:none;}
+
+  .or-row{display:flex; align-items:center; gap:14px; margin:22px 0; color:var(--ink-soft); font-size:12.5px;}
+  .or-row .line{flex:1; height:1px; background:var(--rule);}
+
+  button, .btn{
+    font-family:'IBM Plex Sans', sans-serif; font-size:13.5px; font-weight:500;
+    border:1px solid var(--primary); background:var(--primary); color:#fff;
+    padding:10px 18px; border-radius:var(--radius); cursor:pointer;
+    transition:transform .1s, box-shadow .1s;
+  }
+  button:hover{box-shadow:0 2px 0 rgba(0,0,0,.12);}
+  button:active{transform:translateY(1px); box-shadow:none;}
+  button.ghost{background:transparent; color:var(--primary);}
+  button.small{padding:6px 12px; font-size:12px;}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+
+  /* Table */
+  table{border-collapse:collapse; width:100%; font-size:13px;}
+  th,td{padding:7px 10px; border-bottom:1px solid var(--rule); text-align:left;}
+  th{font-family:'IBM Plex Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); font-weight:500;}
+  td.num, th.num{font-family:'IBM Plex Mono', monospace; text-align:right; font-variant-numeric:tabular-nums;}
+  .table-wrap{background:var(--paper); border:1px solid var(--rule); border-radius:var(--radius); overflow:auto; max-height:420px;}
+
+  .col-chip{
+    display:inline-flex; align-items:center; gap:8px; padding:8px 12px;
+    background:var(--paper); border:1px solid var(--rule); border-radius:var(--radius);
+    margin:4px 6px 4px 0; font-size:13px;
+  }
+  .col-chip .type-toggle{
+    font-family:'IBM Plex Mono', monospace; font-size:10px; text-transform:uppercase;
+    padding:2px 7px; border-radius:10px; cursor:pointer; border:1px solid transparent;
+  }
+  .type-numeric{background:var(--accent-soft); color:var(--accent);}
+  .type-categorical{background:var(--primary-soft); color:var(--primary);}
+
+  .card-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(210px,1fr)); gap:14px; margin-top:6px;}
+  .method-card{
+    background:var(--paper); border:1px solid var(--rule); border-radius:var(--radius);
+    padding:18px; cursor:pointer; transition:border-color .15s, transform .1s;
+  }
+  .method-card:hover{border-color:var(--accent); transform:translateY(-2px);}
+  .method-card.selected{border-color:var(--primary); background:var(--primary-soft);}
+  .method-card.recommended{border-color:var(--brick);}
+  .method-card .m-eyebrow{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--accent); text-transform:uppercase;}
+  .method-card h3{font-size:16.5px; margin:6px 0 6px; font-weight:500;}
+  .method-card p{font-size:12.5px; color:var(--ink-soft); margin:0;}
+  .rec-flag{display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:9.5px; text-transform:uppercase; color:var(--brick); background:var(--brick-soft); padding:2px 6px; border-radius:8px; margin-bottom:6px;}
+
+  .config-box{background:var(--paper); border:1px solid var(--rule); border-radius:var(--radius); padding:22px; margin-top:18px;}
+  .field{margin-bottom:16px;}
+  .field label{display:block; font-size:12px; font-weight:500; color:var(--ink-soft); margin-bottom:6px; text-transform:uppercase; letter-spacing:.03em; font-family:'IBM Plex Mono',monospace;}
+  select, .multi, textarea{
+    width:100%; padding:9px 10px; border:1px solid var(--rule); border-radius:var(--radius);
+    font-family:'IBM Plex Sans',sans-serif; font-size:13.5px; background:#fff; color:var(--ink);
+  }
+  textarea{resize:vertical;}
+  .multi{background:var(--paper); max-height:150px; overflow:auto;}
+  .multi label{display:flex; gap:8px; align-items:center; text-transform:none; font-weight:400; font-size:13.5px; padding:3px 0; letter-spacing:0;}
+  .multi input{margin:0;}
+
+  /* Suggestions + goal box */
+  .suggest-box{background:var(--accent-soft); border:1px solid var(--rule); border-radius:var(--radius); padding:18px 20px; margin:20px 0;}
+  .suggest-box .s-title{margin:0 0 10px; font-size:12px; font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.04em; color:var(--accent);}
+  .suggest-item{font-size:13.5px; padding:7px 0; border-top:1px solid rgba(0,0,0,.07);}
+  .suggest-item:first-of-type{border-top:none;}
+  .suggest-item strong{color:var(--primary);}
+  .goal-box{margin-top:0;}
+  .pref-row{display:flex; gap:22px; flex-wrap:wrap; align-items:center;}
+  .pref-row label{display:flex; gap:7px; align-items:center; font-size:13px; font-weight:400; text-transform:none; letter-spacing:0; font-family:'IBM Plex Sans',sans-serif; color:var(--ink);}
+  .pref-row select{width:auto; padding:5px 8px;}
+  .goal-banner{background:var(--brick-soft); border:1px solid var(--rule); border-left:3px solid var(--brick); border-radius:var(--radius); padding:12px 16px; margin-bottom:18px; font-size:13.5px; display:none;}
+
+  .notebook-head{display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px; margin-top:44px;}
+  .notebook-head h2{margin:0; font-size:22px;}
+
+  /* Results log */
+  .entry{
+    background:var(--paper); border:1px solid var(--rule); border-left:4px solid var(--accent);
+    border-radius:var(--radius); padding:22px 24px; margin-bottom:24px;
+  }
+  .entry .stamp{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft); margin-bottom:2px;}
+  .entry h3{margin:0 0 4px; font-size:19px; font-weight:500;}
+  .entry .verdict{
+    background:var(--primary-soft); border-radius:var(--radius); padding:10px 14px;
+    font-size:13.5px; margin:14px 0; color:var(--primary); font-weight:500;
+  }
+  .entry .row{display:flex; gap:24px; flex-wrap:wrap; margin-top:14px;}
+  .entry .row > div{flex:1; min-width:260px;}
+  canvas{max-width:100%;}
+  .empty-note{color:var(--ink-soft); font-size:13.5px; font-style:italic; padding:20px 0;}
+
+  .stat-tiles{display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; margin:14px 0;}
+  .stat-tile{background:var(--paper); border:1px solid var(--rule); border-radius:var(--radius); padding:10px 12px;}
+  .stat-tile .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; color:var(--ink-soft);}
+  .stat-tile .v{font-family:'IBM Plex Mono',monospace; font-size:17px; margin-top:2px; font-variant-numeric:tabular-nums;}
+
+  @media (max-width:820px){
+    .app{flex-direction:column;}
+    .rail{width:100%; height:auto; position:relative; padding:20px;}
+    .rail-foot{display:none;}
+    .stage{padding:24px;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <p class="brand">Fieldnotes</p>
+    <p class="tagline">a data analysis notebook</p>
+    <div class="rail-step active" data-step="load"><span class="num">01</span><div><div class="label">Load data</div><div class="sub">CSV or Excel</div></div></div>
+    <div class="rail-step" data-step="preview"><span class="num">02</span><div><div class="label">Check columns</div><div class="sub">Confirm types &amp; goals</div></div></div>
+    <div class="rail-step" data-step="analyze"><span class="num">03</span><div><div class="label">Analyze</div><div class="sub">Descriptives, ANOVA, more</div></div></div>
+    <div class="rail-foot">Runs entirely in your browser — your data is never uploaded anywhere.</div>
+  </aside>
+
+  <main class="stage">
+
+    <!-- STEP 1: LOAD -->
+    <section class="panel active" id="panel-load">
+      <p class="eyebrow">Step 01</p>
+      <h2>Load your data</h2>
+      <p class="lede">Upload a CSV or Excel file. The first row should be column headers (e.g. participant_id, group, score, q1, q2…).</p>
+      <div class="dropzone" id="dropzone">
+        <div class="dz-icon">⇩</div>
+        <div class="dz-main">Drop a .csv or .xlsx file here, or click to browse</div>
+        <div class="dz-sub">Everything is parsed locally — nothing leaves this page</div>
+        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+      </div>
+      <div class="or-row"><div class="line"></div>no file handy?<div class="line"></div></div>
+      <div style="text-align:center;">
+        <button class="ghost" id="loadSampleBtn">Load a sample dataset instead →</button>
+      </div>
+    </section>
+
+    <!-- STEP 2: PREVIEW -->
+    <section class="panel" id="panel-preview">
+      <p class="eyebrow">Step 02</p>
+      <h2>Confirm your columns</h2>
+      <p class="lede">Fieldnotes guessed which columns are numeric vs. categorical. Click a badge to flip it if it's wrong.</p>
+      <div id="colChips"></div>
+      <div class="table-wrap" style="margin-top:18px;">
+        <table id="previewTable"></table>
+      </div>
+      <p style="font-size:12px; color:var(--ink-soft); margin-top:8px;" id="rowCountNote"></p>
+
+      <div class="suggest-box" id="suggestBox">
+        <p class="s-title">What you can do with this data</p>
+        <div id="suggestList"></div>
+      </div>
+
+      <div class="config-box goal-box">
+        <div class="field">
+          <label>What do you actually want to find out? (optional)</label>
+          <textarea id="userGoal" rows="2" placeholder="e.g. Does the coaching group score higher than the control group?"></textarea>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>How should results be shown?</label>
+          <div class="pref-row">
+            <label><input type="checkbox" id="prefVerdict" checked> Plain-language interpretation</label>
+            <label>Decimal places
+              <select id="prefDecimals">
+                <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:22px;">
+        <button id="toAnalyzeBtn">Continue to Analysis →</button>
+      </div>
+    </section>
+
+    <!-- STEP 3: ANALYZE -->
+    <section class="panel" id="panel-analyze">
+      <p class="eyebrow">Step 03</p>
+      <h2>Choose an analysis</h2>
+      <p class="lede">Run as many of these as you like — each result gets added to your notebook below.</p>
+
+      <div class="goal-banner" id="goalBanner"></div>
+
+      <div class="card-grid" id="methodGrid">
+        <div class="method-card" data-method="descriptives">
+          <p class="m-eyebrow">Summarize</p>
+          <h3>Descriptive statistics</h3>
+          <p>Mean, median, SD, quartiles, skewness &amp; histograms for any numeric column.</p>
+        </div>
+        <div class="method-card" data-method="anova">
+          <p class="m-eyebrow">Compare groups</p>
+          <h3>One-way ANOVA</h3>
+          <p>Test whether a numeric outcome differs across 2+ groups.</p>
+        </div>
+        <div class="method-card" data-method="correlation">
+          <p class="m-eyebrow">Relate variables</p>
+          <h3>Correlation</h3>
+          <p>Pearson's r between two numeric variables, with a scatter plot.</p>
+        </div>
+        <div class="method-card" data-method="reliability">
+          <p class="m-eyebrow">Questionnaires</p>
+          <h3>Scale reliability</h3>
+          <p>Cronbach's alpha across a set of questionnaire items.</p>
+        </div>
+        <div class="method-card" data-method="frequency">
+          <p class="m-eyebrow">Questionnaires</p>
+          <h3>Frequencies</h3>
+          <p>Response counts and percentages — ideal for Likert items.</p>
+        </div>
+      </div>
+
+      <div class="config-box" id="configBox" style="display:none;"></div>
+
+      <div class="notebook-head">
+        <h2>Your notebook</h2>
+        <button class="ghost small" id="downloadReportBtn" style="display:none;">⇩ Download report</button>
+      </div>
+      <div id="resultsLog">
+        <p class="empty-note">Results will appear here as you run analyses.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+/* =========================================================
+   STATE
+   ========================================================= */
+const state = {
+  headers: [],
+  rows: [],         // array of objects {header: value}
+  types: {},        // header -> 'numeric' | 'categorical'
+  entryCount: 0,
+  chartCount: 0,
+  userGoal: '',
+  prefs: { decimals: 3, showVerdict: true }
+};
+
+/* =========================================================
+   STAT ENGINE
+   ========================================================= */
+const Stat = {};
+
+Stat.mean = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+
+Stat.variance = (arr, sample=true) => {
+  const m = Stat.mean(arr);
+  const ss = arr.reduce((a,b)=>a+(b-m)*(b-m),0);
+  return ss/(arr.length - (sample?1:0));
+};
+Stat.sd = (arr, sample=true) => Math.sqrt(Stat.variance(arr, sample));
+
+Stat.sorted = arr => [...arr].sort((a,b)=>a-b);
+
+Stat.quantile = (sortedArr, q) => {
+  const n = sortedArr.length;
+  const pos = (n-1)*q;
+  const base = Math.floor(pos);
+  const rest = pos-base;
+  if (sortedArr[base+1] !== undefined) return sortedArr[base] + rest*(sortedArr[base+1]-sortedArr[base]);
+  return sortedArr[base];
+};
+
+Stat.median = arr => Stat.quantile(Stat.sorted(arr), 0.5);
+
+Stat.mode = arr => {
+  const freq = new Map();
+  arr.forEach(v => freq.set(v, (freq.get(v)||0)+1));
+  let max = 0, modes = [];
+  freq.forEach((count,val)=>{ if(count>max){max=count; modes=[val];} else if(count===max){modes.push(val);} });
+  if (max<=1) return 'none (all unique)';
+  return modes.join(', ');
+};
+
+Stat.skewness = arr => {
+  const n = arr.length, m = Stat.mean(arr);
+  const sdPop = Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/n);
+  const m3 = arr.reduce((a,b)=>a+(b-m)**3,0)/n;
+  const g1 = m3/(sdPop**3);
+  return (Math.sqrt(n*(n-1))/(n-2)) * g1;
+};
+
+Stat.kurtosisExcess = arr => {
+  const n = arr.length, m = Stat.mean(arr);
+  const sdPop = Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/n);
+  const m4 = arr.reduce((a,b)=>a+(b-m)**4,0)/n;
+  const g2 = m4/(sdPop**4) - 3;
+  return ((n-1)/((n-2)*(n-3))) * ((n+1)*g2 + 6);
+};
+
+Stat.describe = arr => {
+  const s = Stat.sorted(arr);
+  const n = arr.length;
+  const mean = Stat.mean(arr);
+  const sd = Stat.sd(arr);
+  return {
+    n, mean, median: Stat.median(arr), mode: Stat.mode(arr),
+    sd, variance: Stat.variance(arr), sem: sd/Math.sqrt(n),
+    min: s[0], max: s[n-1], range: s[n-1]-s[0],
+    q1: Stat.quantile(s,0.25), q3: Stat.quantile(s,0.75),
+    iqr: Stat.quantile(s,0.75)-Stat.quantile(s,0.25),
+    skew: n>2 ? Stat.skewness(arr) : NaN,
+    kurtosis: n>3 ? Stat.kurtosisExcess(arr) : NaN
+  };
+};
+
+// --- special functions for p-values ---
+function gammaln(xx){
+  const cof=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+  let x=xx, y=xx, tmp=x+5.5;
+  tmp -= (x+0.5)*Math.log(tmp);
+  let ser=1.000000000190015;
+  for(let j=0;j<6;j++){ y+=1; ser+=cof[j]/y; }
+  return -tmp+Math.log(2.5066282746310005*ser/x);
+}
+function betacf(x,a,b){
+  const MAXIT=200, EPS=3e-9, FPMIN=1e-30;
+  const qab=a+b, qap=a+1, qam=a-1;
+  let c=1, d=1-qab*x/qap;
+  if(Math.abs(d)<FPMIN) d=FPMIN;
+  d=1/d; let h=d;
+  for(let m=1;m<=MAXIT;m++){
+    const m2=2*m;
+    let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+    d=1+aa*d; if(Math.abs(d)<FPMIN)d=FPMIN;
+    c=1+aa/c; if(Math.abs(c)<FPMIN)c=FPMIN;
+    d=1/d; h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+    d=1+aa*d; if(Math.abs(d)<FPMIN)d=FPMIN;
+    c=1+aa/c; if(Math.abs(c)<FPMIN)c=FPMIN;
+    d=1/d; const del=d*c; h*=del;
+    if(Math.abs(del-1)<EPS) break;
+  }
+  return h;
+}
+function ibeta(x,a,b){
+  if(x<=0) return 0;
+  if(x>=1) return 1;
+  const bt=Math.exp(gammaln(a+b)-gammaln(a)-gammaln(b)+a*Math.log(x)+b*Math.log(1-x));
+  if (x < (a+1)/(a+b+2)) return bt*betacf(x,a,b)/a;
+  return 1-bt*betacf(1-x,b,a)/b;
+}
+Stat.fPValue = (F,d1,d2) => {
+  if(F<=0) return 1;
+  const x = d1*F/(d1*F+d2);
+  return Math.max(0, Math.min(1, 1-ibeta(x,d1/2,d2/2)));
+};
+Stat.tPValueTwoTail = (t,df) => {
+  const x = df/(df+t*t);
+  return Math.max(0, Math.min(1, ibeta(x, df/2, 0.5)));
+};
+
+Stat.oneWayAnova = (groupsObj) => {
+  const groupNames = Object.keys(groupsObj);
+  const allVals = groupNames.flatMap(g=>groupsObj[g]);
+  const grandMean = Stat.mean(allVals);
+  const N = allVals.length, k = groupNames.length;
+  let ssBetween=0, ssWithin=0;
+  const groupStats = groupNames.map(g=>{
+    const vals = groupsObj[g];
+    const m = Stat.mean(vals);
+    ssBetween += vals.length * (m-grandMean)**2;
+    ssWithin += vals.reduce((a,b)=>a+(b-m)**2,0);
+    return {group:g, n:vals.length, mean:m, sd: vals.length>1?Stat.sd(vals):0};
+  });
+  const dfB = k-1, dfW = N-k;
+  const msB = ssBetween/dfB, msW = ssWithin/dfW;
+  const F = msB/msW;
+  const p = Stat.fPValue(F, dfB, dfW);
+  const ssTotal = ssBetween+ssWithin;
+  const etaSq = ssBetween/ssTotal;
+  return {groupStats, dfB, dfW, ssBetween, ssWithin, ssTotal, msB, msW, F, p, etaSq, grandMean, N, k};
+};
+
+Stat.pearson = (x,y) => {
+  const n = x.length;
+  const mx = Stat.mean(x), my = Stat.mean(y);
+  let num=0, dx2=0, dy2=0;
+  for(let i=0;i<n;i++){ const dx=x[i]-mx, dy=y[i]-my; num+=dx*dy; dx2+=dx*dx; dy2+=dy*dy; }
+  const r = num/Math.sqrt(dx2*dy2);
+  const df = n-2;
+  const t = r*Math.sqrt(df/(1-r*r));
+  const p = df>0 ? Stat.tPValueTwoTail(t, df) : NaN;
+  const slope = num/dx2;
+  const intercept = my - slope*mx;
+  return {r, r2:r*r, n, df, t, p, slope, intercept};
+};
+
+Stat.cronbachAlpha = (itemsObj) => {
+  const items = Object.keys(itemsObj);
+  const k = items.length;
+  const n = itemsObj[items[0]].length;
+  const itemVars = items.map(it => Stat.variance(itemsObj[it]));
+  const totals = [];
+  for(let i=0;i<n;i++){ let s=0; items.forEach(it=>s+=itemsObj[it][i]); totals.push(s); }
+  const totalVar = Stat.variance(totals);
+  const alpha = (k/(k-1)) * (1 - itemVars.reduce((a,b)=>a+b,0)/totalVar);
+  const itemTotal = items.map((it,idx)=>{
+    const rest = totals.map((t,i)=>t - itemsObj[it][i]);
+    const r = Stat.pearson(itemsObj[it], rest).r;
+    return {item:it, r, variance:itemVars[idx]};
+  });
+  return {alpha, k, n, itemTotal};
+};
+
+Stat.frequency = arr => {
+  const freq = new Map();
+  arr.forEach(v=>freq.set(v,(freq.get(v)||0)+1));
+  const n = arr.length;
+  return [...freq.entries()].sort((a,b)=> (a[0]>b[0]?1:-1)).map(([val,count])=>({
+    value: val, count, pct: (100*count/n).toFixed(1)
+  }));
+};
+
+/* =========================================================
+   FILE PARSING
+   ========================================================= */
+function detectType(values){
+  const nonEmpty = values.filter(v=>v!=='' && v!=null);
+  if (nonEmpty.length===0) return 'categorical';
+  const numericCount = nonEmpty.filter(v=> v!=='' && !isNaN(parseFloat(v)) && isFinite(v)).length;
+  return (numericCount/nonEmpty.length >= 0.8) ? 'numeric' : 'categorical';
+}
+
+function ingest(headers, dataRows){
+  state.headers = headers;
+  state.types = {};
+  headers.forEach((h,i)=>{
+    const colVals = dataRows.map(r=>r[i]);
+    state.types[h] = detectType(colVals);
+  });
+  state.rows = dataRows.map(r=>{
+    const obj = {};
+    headers.forEach((h,i)=>{
+      let v = r[i];
+      if (state.types[h]==='numeric' && v!=='' && v!=null && !isNaN(parseFloat(v))) v = parseFloat(v);
+      obj[h]=v;
+    });
+    return obj;
+  });
+  renderPreview();
+  goStep('preview');
+}
+
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if (file) handleFile(file);
+});
+const dz = document.getElementById('dropzone');
+dz.addEventListener('click', ()=>document.getElementById('fileInput').click());
+dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('hover'); });
+dz.addEventListener('dragleave', ()=> dz.classList.remove('hover'));
+dz.addEventListener('drop', e=>{
+  e.preventDefault(); dz.classList.remove('hover');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+function handleFile(file){
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.csv')){
+    Papa.parse(file, { skipEmptyLines:true, complete: res => {
+      const rows = res.data;
+      const headers = rows[0];
+      ingest(headers, rows.slice(1));
+    }});
+  } else {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+      const headers = rows[0];
+      ingest(headers, rows.slice(1).filter(r=>r.some(c=>c!=='')));
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+document.getElementById('loadSampleBtn').addEventListener('click', ()=>{
+  const {headers, rows} = generateSampleData();
+  ingest(headers, rows);
+});
+
+function generateSampleData(){
+  let seed = 42;
+  function rnd(){ seed = (seed*9301+49297)%233280; return seed/233280; }
+  function gauss(mean, sd){
+    const u1=rnd(), u2=rnd();
+    return mean + sd*Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
+  }
+  const groups = ['Control','Coaching','Coaching+Feedback'];
+  const groupEffect = {Control:0, Coaching:6, 'Coaching+Feedback':11};
+  const headers = ['participant_id','group','age','test_score','q1_confidence','q2_motivation','q3_clarity','q4_support','q5_satisfaction'];
+  const rows = [];
+  for(let i=1;i<=45;i++){
+    const g = groups[i%3];
+    const age = Math.round(gauss(27,5));
+    const score = Math.max(0, Math.round(gauss(62+groupEffect[g], 9)));
+    const base = 2.6 + (score-62)/30 + gauss(0,0.35);
+    const clamp = v => Math.min(5, Math.max(1, Math.round(v)));
+    rows.push([
+      'P'+String(i).padStart(3,'0'), g, age, score,
+      clamp(base+gauss(0,0.4)), clamp(base+gauss(0,0.4)),
+      clamp(base+gauss(0,0.4)), clamp(base+gauss(0,0.4)), clamp(base+gauss(0,0.4))
+    ]);
+  }
+  return {headers, rows};
+}
+
+/* =========================================================
+   NAVIGATION
+   ========================================================= */
+function goStep(step){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+step).classList.add('active');
+  document.querySelectorAll('.rail-step').forEach(s=>{
+    s.classList.toggle('active', s.dataset.step===step);
+    if (['load','preview'].indexOf(s.dataset.step) < ['load','preview'].indexOf(step)) s.classList.add('done');
+  });
+  if (step==='analyze') applyGoalSuggestion();
+}
+document.querySelectorAll('.rail-step').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    if (el.dataset.step!=='load' && state.headers.length===0) return;
+    goStep(el.dataset.step);
+  });
+});
+document.getElementById('toAnalyzeBtn').addEventListener('click', ()=>{
+  state.userGoal = document.getElementById('userGoal').value;
+  state.prefs.showVerdict = document.getElementById('prefVerdict').checked;
+  state.prefs.decimals = parseInt(document.getElementById('prefDecimals').value, 10);
+  goStep('analyze');
+});
+
+/* =========================================================
+   PREVIEW RENDER + SUGGESTIONS
+   ========================================================= */
+function renderPreview(){
+  const chips = document.getElementById('colChips');
+  chips.innerHTML = '';
+  state.headers.forEach(h=>{
+    const chip = document.createElement('span');
+    chip.className='col-chip';
+    chip.innerHTML = `<strong>${h}</strong> <span class="type-toggle type-${state.types[h]}" data-col="${h}">${state.types[h]}</span>`;
+    chips.appendChild(chip);
+  });
+  chips.querySelectorAll('.type-toggle').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const col = el.dataset.col;
+      state.types[col] = state.types[col]==='numeric' ? 'categorical' : 'numeric';
+      if (state.types[col]==='numeric'){
+        state.rows.forEach(r=>{ const v=parseFloat(r[col]); r[col] = isNaN(v)? r[col] : v; });
+      }
+      renderPreview();
+    });
+  });
+
+  const table = document.getElementById('previewTable');
+  const previewRows = state.rows.slice(0,12);
+  let html = '<thead><tr>' + state.headers.map(h=>`<th class="${state.types[h]==='numeric'?'num':''}">${h}</th>`).join('') + '</tr></thead><tbody>';
+  previewRows.forEach(r=>{
+    html += '<tr>' + state.headers.map(h=>`<td class="${state.types[h]==='numeric'?'num':''}">${r[h]}</td>`).join('') + '</tr>';
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+  document.getElementById('rowCountNote').textContent = `Showing first ${previewRows.length} of ${state.rows.length} rows.`;
+
+  renderSuggestions();
+}
+
+function columnCardinalityRatio(col){
+  const vals = state.rows.map(r=>r[col]);
+  const unique = new Set(vals).size;
+  return unique/vals.length;
+}
+
+function isLikertLike(col){
+  const vals = state.rows.map(r=>r[col]).filter(v=>typeof v==='number' && !isNaN(v));
+  if (vals.length===0) return false;
+  const allInt = vals.every(v=>Number.isInteger(v));
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const uniqueCount = new Set(vals).size;
+  return allInt && min>=1 && max<=7 && uniqueCount<=7;
+}
+
+function computeSuggestions(){
+  const nums = numericCols().filter(c=>columnCardinalityRatio(c)<0.9);
+  const cats = categoricalCols().filter(c=>columnCardinalityRatio(c)<0.9);
+  const likert = numericCols().filter(isLikertLike);
+  const suggestions = [];
+  if (nums.length>=1) suggestions.push(`<strong>Descriptive statistics</strong> — you have ${nums.length} numeric column${nums.length===1?'':'s'} (${nums.slice(0,4).join(', ')}${nums.length>4?'…':''}) to summarize.`);
+  if (nums.length>=1 && cats.length>=1) suggestions.push(`<strong>One-way ANOVA</strong> — compare something like <em>${nums[0]}</em> across the groups in <em>${cats[0]}</em>.`);
+  if (nums.length>=2) suggestions.push(`<strong>Correlation</strong> — check whether any of your numeric columns move together.`);
+  if (likert.length>=2) suggestions.push(`<strong>Scale reliability</strong> — ${likert.length} columns look like Likert-style items (${likert.slice(0,3).join(', ')}${likert.length>3?'…':''}), good candidates for Cronbach's alpha.`);
+  if (cats.length>=1 || likert.length>=1) suggestions.push(`<strong>Frequency tables</strong> — see response counts for <em>${cats[0]||likert[0]}</em>.`);
+  return suggestions;
+}
+
+function renderSuggestions(){
+  const box = document.getElementById('suggestList');
+  const suggestions = computeSuggestions();
+  if (suggestions.length===0){
+    box.innerHTML = `<div class="suggest-item">Add at least one numeric column to unlock analyses.</div>`;
+    return;
+  }
+  box.innerHTML = suggestions.map(s=>`<div class="suggest-item">${s}</div>`).join('');
+}
+
+/* =========================================================
+   ANALYSIS CONFIG UI
+   ========================================================= */
+const numericCols = () => state.headers.filter(h=>state.types[h]==='numeric');
+const categoricalCols = () => state.headers.filter(h=>state.types[h]==='categorical');
+
+document.querySelectorAll('.method-card').forEach(card=>{
+  card.addEventListener('click', ()=>{
+    document.querySelectorAll('.method-card').forEach(c=>c.classList.remove('selected'));
+    card.classList.add('selected');
+    renderConfig(card.dataset.method);
+  });
+});
+
+function selectHTML(id, options){
+  return `<select id="${id}">${options.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
+}
+function multiHTML(id, options){
+  return `<div class="multi" id="${id}">${options.map((o,i)=>`<label><input type="checkbox" value="${o}" ${i<4?'checked':''}> ${o}</label>`).join('')}</div>`;
+}
+function checkedValues(id){
+  return [...document.querySelectorAll(`#${id} input:checked`)].map(i=>i.value);
+}
+
+function renderConfig(method){
+  const box = document.getElementById('configBox');
+  box.style.display = 'block';
+  const nums = numericCols(), cats = categoricalCols();
+
+  if (method==='descriptives'){
+    box.innerHTML = `
+      <div class="field"><label>Numeric columns to summarize</label>${multiHTML('cfgCols', nums)}</div>
+      <button id="runBtn">Run descriptive statistics</button>`;
+  } else if (method==='anova'){
+    if (nums.length===0 || cats.length===0){
+      box.innerHTML = `<p class="empty-note">ANOVA needs at least one numeric column and one categorical column.</p>`;
+      return;
+    }
+    box.innerHTML = `
+      <div class="field"><label>Outcome (numeric)</label>${selectHTML('cfgDV', nums)}</div>
+      <div class="field"><label>Grouping factor (categorical)</label>${selectHTML('cfgFactor', cats)}</div>
+      <button id="runBtn">Run one-way ANOVA</button>`;
+  } else if (method==='correlation'){
+    if (nums.length<2){ box.innerHTML = `<p class="empty-note">Correlation needs at least two numeric columns.</p>`; return; }
+    box.innerHTML = `
+      <div class="field"><label>Variable X</label>${selectHTML('cfgX', nums)}</div>
+      <div class="field"><label>Variable Y</label>${selectHTML('cfgY', nums)}</div>
+      <button id="runBtn">Run correlation</button>`;
+    document.getElementById('cfgY').selectedIndex = Math.min(1,nums.length-1);
+  } else if (method==='reliability'){
+    if (nums.length<2){ box.innerHTML = `<p class="empty-note">Reliability analysis needs at least two numeric item columns.</p>`; return; }
+    box.innerHTML = `
+      <div class="field"><label>Questionnaire items</label>${multiHTML('cfgItems', nums)}</div>
+      <button id="runBtn">Compute Cronbach's alpha</button>`;
+  } else if (method==='frequency'){
+    const all = [...cats, ...nums];
+    box.innerHTML = `
+      <div class="field"><label>Column</label>${selectHTML('cfgFreqCol', all)}</div>
+      <button id="runBtn">Show frequencies</button>`;
+  }
+  document.getElementById('runBtn').addEventListener('click', ()=>runAnalysis(method));
+}
+
+/* =========================================================
+   GOAL -> SUGGESTED METHOD
+   ========================================================= */
+function applyGoalSuggestion(){
+  const banner = document.getElementById('goalBanner');
+  const goal = state.userGoal || '';
+  document.querySelectorAll('.method-card').forEach(c=>c.classList.remove('recommended'));
+  document.querySelectorAll('.rec-flag').forEach(f=>f.remove());
+  if (!goal.trim()){ banner.style.display='none'; return; }
+
+  let method='descriptives', label='Descriptive statistics';
+  if (/differ|compare|between group|higher than|lower than|vs\.?|versus|better than/i.test(goal)){ method='anova'; label='One-way ANOVA'; }
+  else if (/relat|correlat|associat|linked|connection|predict/i.test(goal)){ method='correlation'; label='Correlation'; }
+  else if (/reliab|consisten|alpha/i.test(goal)){ method='reliability'; label="Scale reliability (Cronbach's α)"; }
+  else if (/how many|percent|distribution|frequenc|often|proportion/i.test(goal)){ method='frequency'; label='Frequency tables'; }
+
+  banner.style.display = 'block';
+  banner.innerHTML = `Based on what you told us, <strong>${label}</strong> looks like the best place to start. <button class="ghost small" id="goalJumpBtn">Set it up →</button>`;
+  document.getElementById('goalJumpBtn').addEventListener('click', ()=>{
+    const card = document.querySelector(`.method-card[data-method="${method}"]`);
+    if (card){ card.click(); card.scrollIntoView({behavior:'smooth', block:'center'}); }
+  });
+
+  const card = document.querySelector(`.method-card[data-method="${method}"]`);
+  if (card){
+    card.classList.add('recommended');
+    const flag = document.createElement('p');
+    flag.className='rec-flag';
+    flag.textContent='Suggested for you';
+    card.prepend(flag);
+  }
+}
+
+/* =========================================================
+   RUN ANALYSES + RENDER RESULTS
+   ========================================================= */
+function newEntry(title, subtitle){
+  state.entryCount++;
+  const log = document.getElementById('resultsLog');
+  const empty = log.querySelector('.empty-note');
+  if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.className='entry';
+  const now = new Date();
+  div.innerHTML = `<div class="stamp">Entry ${String(state.entryCount).padStart(2,'0')} · ${now.toLocaleTimeString()}</div>
+    <h3>${title}</h3>
+    ${subtitle?`<p style="color:var(--ink-soft); font-size:13px; margin:0 0 6px;">${subtitle}</p>`:''}
+    <div class="entry-body"></div>`;
+  log.prepend(div);
+  document.getElementById('downloadReportBtn').style.display = 'inline-block';
+  return div.querySelector('.entry-body');
+}
+
+function tileRow(pairs){
+  return `<div class="stat-tiles">${pairs.map(([k,v])=>`<div class="stat-tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>`;
+}
+
+function fmt(n, d){
+  if (typeof d !== 'number') d = state.prefs.decimals;
+  if (typeof n !== 'number' || isNaN(n)) return '—';
+  return Number(n.toFixed(d)).toString();
+}
+function pStr(p){
+  if (isNaN(p)) return '—';
+  return p<0.001 ? '< .001' : fmt(p, Math.max(state.prefs.decimals,3));
+}
+function verdictHTML(text){
+  return state.prefs.showVerdict ? `<div class="verdict">${text}</div>` : '';
+}
+
+function nextCanvasId(){ state.chartCount++; return 'chart_'+state.chartCount; }
+
+function runAnalysis(method){
+  if (method==='descriptives') runDescriptives();
+  else if (method==='anova') runAnova();
+  else if (method==='correlation') runCorrelation();
+  else if (method==='reliability') runReliability();
+  else if (method==='frequency') runFrequency();
+}
+
+function runDescriptives(){
+  const cols = checkedValues('cfgCols');
+  if (cols.length===0) return;
+  const body = newEntry('Descriptive statistics', cols.join(', '));
+  let tableHTML = `<div class="table-wrap"><table><thead><tr><th>Column</th><th class="num">N</th><th class="num">Mean</th><th class="num">Median</th><th class="num">SD</th><th class="num">Min</th><th class="num">Max</th><th class="num">Skew</th><th class="num">Kurtosis</th></tr></thead><tbody>`;
+  cols.forEach(c=>{
+    const vals = state.rows.map(r=>r[c]).filter(v=>typeof v==='number' && !isNaN(v));
+    const d = Stat.describe(vals);
+    tableHTML += `<tr><td>${c}</td><td class="num">${d.n}</td><td class="num">${fmt(d.mean)}</td><td class="num">${fmt(d.median)}</td><td class="num">${fmt(d.sd)}</td><td class="num">${fmt(d.min)}</td><td class="num">${fmt(d.max)}</td><td class="num">${fmt(d.skew)}</td><td class="num">${fmt(d.kurtosis)}</td></tr>`;
+  });
+  tableHTML += '</tbody></table></div>';
+  body.innerHTML = tableHTML + `<div class="row" id="histRow"></div>`;
+  const histRow = body.querySelector('#histRow');
+  cols.forEach(c=>{
+    const vals = state.rows.map(r=>r[c]).filter(v=>typeof v==='number' && !isNaN(v));
+    const wrap = document.createElement('div');
+    const cid = nextCanvasId();
+    wrap.innerHTML = `<p style="font-size:12px; color:var(--ink-soft); margin:0 0 4px;">${c}</p><canvas id="${cid}"></canvas>`;
+    histRow.appendChild(wrap);
+    drawHistogram(cid, vals, c);
+  });
+}
+
+function runAnova(){
+  const dv = document.getElementById('cfgDV').value;
+  const factor = document.getElementById('cfgFactor').value;
+  const groupsObj = {};
+  state.rows.forEach(r=>{
+    if (typeof r[dv] !== 'number' || isNaN(r[dv]) || r[factor]==='' || r[factor]==null) return;
+    (groupsObj[r[factor]] = groupsObj[r[factor]] || []).push(r[dv]);
+  });
+  const res = Stat.oneWayAnova(groupsObj);
+  const body = newEntry('One-way ANOVA', `${dv} by ${factor}`);
+  const sig = res.p < 0.05;
+  const verdict = sig
+    ? `${dv} differs significantly across ${factor} groups, F(${res.dfB}, ${res.dfW}) = ${fmt(res.F,2)}, p ${res.p<0.001?'< .001':'= '+fmt(res.p,3)}. Group differences explain about ${fmt(res.etaSq*100,1)}% of the variance (η² = ${fmt(res.etaSq,3)}).`
+    : `No significant difference in ${dv} across ${factor} groups, F(${res.dfB}, ${res.dfW}) = ${fmt(res.F,2)}, p = ${fmt(res.p,3)}.`;
+  let html = verdictHTML(verdict);
+  html += tileRow([['F', fmt(res.F,2)], ['p-value', pStr(res.p)], ['η²', fmt(res.etaSq,3)], ['df', res.dfB+', '+res.dfW]]);
+  html += `<div class="table-wrap"><table><thead><tr><th>Source</th><th class="num">SS</th><th class="num">df</th><th class="num">MS</th><th class="num">F</th><th class="num">p</th></tr></thead><tbody>
+    <tr><td>Between groups</td><td class="num">${fmt(res.ssBetween,2)}</td><td class="num">${res.dfB}</td><td class="num">${fmt(res.msB,2)}</td><td class="num">${fmt(res.F,2)}</td><td class="num">${pStr(res.p)}</td></tr>
+    <tr><td>Within groups</td><td class="num">${fmt(res.ssWithin,2)}</td><td class="num">${res.dfW}</td><td class="num">${fmt(res.msW,2)}</td><td></td><td></td></tr>
+    <tr><td>Total</td><td class="num">${fmt(res.ssTotal,2)}</td><td class="num">${res.dfB+res.dfW}</td><td></td><td></td><td></td></tr>
+    </tbody></table></div>`;
+  html += `<div class="table-wrap" style="margin-top:14px;"><table><thead><tr><th>Group</th><th class="num">N</th><th class="num">Mean</th><th class="num">SD</th></tr></thead><tbody>
+    ${res.groupStats.map(g=>`<tr><td>${g.group}</td><td class="num">${g.n}</td><td class="num">${fmt(g.mean,2)}</td><td class="num">${fmt(g.sd,2)}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  const cid = nextCanvasId();
+  html += `<div class="row"><div><p style="font-size:12px; color:var(--ink-soft);">Group means</p><canvas id="${cid}"></canvas></div></div>`;
+  body.innerHTML = html;
+  drawBarChart(cid, res.groupStats.map(g=>g.group), res.groupStats.map(g=>g.mean), dv);
+}
+
+function runCorrelation(){
+  const x = document.getElementById('cfgX').value;
+  const y = document.getElementById('cfgY').value;
+  const pairs = state.rows.filter(r=> typeof r[x]==='number' && typeof r[y]==='number' && !isNaN(r[x]) && !isNaN(r[y]));
+  const xs = pairs.map(r=>r[x]), ys = pairs.map(r=>r[y]);
+  const res = Stat.pearson(xs, ys);
+  const body = newEntry('Correlation', `${x} vs. ${y}`);
+  const strength = Math.abs(res.r) > 0.5 ? 'strong' : Math.abs(res.r) > 0.3 ? 'moderate' : 'weak';
+  const dir = res.r > 0 ? 'positive' : 'negative';
+  const verdict = res.p < 0.05
+    ? `There is a statistically significant, ${strength} ${dir} relationship between ${x} and ${y}, r(${res.df}) = ${fmt(res.r,2)}, p ${res.p<0.001?'< .001':'= '+fmt(res.p,3)}.`
+    : `No statistically significant relationship was found between ${x} and ${y}, r(${res.df}) = ${fmt(res.r,2)}, p = ${fmt(res.p,3)}.`;
+  let html = verdictHTML(verdict);
+  html += tileRow([['r', fmt(res.r,3)], ['r²', fmt(res.r2,3)], ['p-value', pStr(res.p)], ['n', res.n]]);
+  const cid = nextCanvasId();
+  html += `<div class="row"><div><canvas id="${cid}"></canvas></div></div>`;
+  body.innerHTML = html;
+  drawScatter(cid, xs, ys, x, y, res.slope, res.intercept);
+}
+
+function runReliability(){
+  const items = checkedValues('cfgItems');
+  if (items.length<2) return;
+  const validRows = state.rows.filter(r=> items.every(it => typeof r[it]==='number' && !isNaN(r[it])));
+  const itemsObj = {};
+  items.forEach(it => itemsObj[it] = validRows.map(r=>r[it]));
+  const res = Stat.cronbachAlpha(itemsObj);
+  const body = newEntry("Scale reliability — Cronbach's α", items.join(', '));
+  const quality = res.alpha>=0.9?'excellent':res.alpha>=0.8?'good':res.alpha>=0.7?'acceptable':res.alpha>=0.6?'questionable':'poor';
+  const verdict = `Cronbach's α = ${fmt(res.alpha,3)} across ${res.k} items (n = ${res.n}) — internal consistency is ${quality}.`;
+  let html = verdictHTML(verdict);
+  html += tileRow([['α', fmt(res.alpha,3)], ['Items', res.k], ['N', res.n]]);
+  html += `<div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Item variance</th><th class="num">Item–total r</th></tr></thead><tbody>
+    ${res.itemTotal.map(it=>`<tr><td>${it.item}</td><td class="num">${fmt(it.variance,2)}</td><td class="num">${fmt(it.r,3)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p style="font-size:12px; color:var(--ink-soft); margin-top:10px;">Rule of thumb: α ≥ .70 is usually considered acceptable for research use. Items with low item–total correlation (well below the others) are candidates to review or drop.</p>`;
+  body.innerHTML = html;
+}
+
+function runFrequency(){
+  const col = document.getElementById('cfgFreqCol').value;
+  const cleanVals = state.rows.map(r=>r[col]).filter(v=>v!=='' && v!=null);
+  const freq = Stat.frequency(cleanVals);
+  const body = newEntry('Frequency table', col);
+  let html = `<div class="table-wrap"><table><thead><tr><th>Value</th><th class="num">Count</th><th class="num">%</th></tr></thead><tbody>
+    ${freq.map(f=>`<tr><td>${f.value}</td><td class="num">${f.count}</td><td class="num">${f.pct}%</td></tr>`).join('')}
+    </tbody></table></div>`;
+  const cid = nextCanvasId();
+  html += `<div class="row"><div><canvas id="${cid}"></canvas></div></div>`;
+  body.innerHTML = html;
+  drawBarChart(cid, freq.map(f=>String(f.value)), freq.map(f=>f.count), 'Count');
+}
+
+/* =========================================================
+   CHARTS
+   ========================================================= */
+const CHART_COLORS = ['#2F6F9E','#1F4B3F','#A8412F','#7A6B45','#54728C'];
+
+function drawHistogram(canvasId, values, label){
+  const ctx = document.getElementById(canvasId);
+  const n = values.length;
+  const k = Math.max(5, Math.ceil(Math.log2(n)+1));
+  const min = Math.min(...values), max = Math.max(...values);
+  const width = (max-min)/k || 1;
+  const bins = new Array(k).fill(0);
+  values.forEach(v=>{
+    let idx = Math.floor((v-min)/width);
+    if (idx>=k) idx=k-1; if(idx<0) idx=0;
+    bins[idx]++;
+  });
+  const labels = bins.map((_,i)=> (min+i*width).toFixed(1));
+  new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ label, data:bins, backgroundColor:CHART_COLORS[0], borderRadius:2 }]},
+    options:{ plugins:{legend:{display:false}}, scales:{ x:{title:{display:true,text:label}}, y:{title:{display:true,text:'count'}, beginAtZero:true} } }
+  });
+}
+
+function drawBarChart(canvasId, labels, values, label){
+  const ctx = document.getElementById(canvasId);
+  new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ label, data:values, backgroundColor:CHART_COLORS[1], borderRadius:2 }]},
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, title:{display:true,text:label}} } }
+  });
+}
+
+function drawScatter(canvasId, xs, ys, xLabel, yLabel, slope, intercept){
+  const ctx = document.getElementById(canvasId);
+  const points = xs.map((x,i)=>({x, y:ys[i]}));
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const linePts = [{x:minX, y:slope*minX+intercept},{x:maxX, y:slope*maxX+intercept}];
+  new Chart(ctx, {
+    type:'scatter',
+    data:{ datasets:[
+      { label:`${xLabel} vs ${yLabel}`, data:points, backgroundColor:CHART_COLORS[0] },
+      { label:'trend', data:linePts, type:'line', borderColor:CHART_COLORS[2], borderWidth:2, pointRadius:0, fill:false }
+    ]},
+    options:{ scales:{ x:{title:{display:true,text:xLabel}}, y:{title:{display:true,text:yLabel}} } }
+  });
+}
+
+/* =========================================================
+   DOWNLOAD REPORT
+   ========================================================= */
+function downloadReport(){
+  const log = document.getElementById('resultsLog');
+  const liveCanvases = log.querySelectorAll('canvas');
+  const clone = log.cloneNode(true);
+  const cloneCanvases = clone.querySelectorAll('canvas');
+  liveCanvases.forEach((c,i)=>{
+    const img = document.createElement('img');
+    img.src = c.toDataURL('image/png');
+    img.style.maxWidth = '100%';
+    img.style.border = '1px solid #C8D0C0';
+    img.style.borderRadius = '3px';
+    if (cloneCanvases[i]) cloneCanvases[i].replaceWith(img);
+  });
+
+  const reportCSS = `
+    body{font-family:'IBM Plex Sans',Arial,sans-serif; background:#EFF2EA; color:#1B231F; padding:40px 20px; max-width:900px; margin:0 auto;}
+    h1{font-family:Georgia,serif; font-style:italic; margin-bottom:2px;}
+    .meta{color:#495650; font-size:13px; margin-top:0; margin-bottom:30px;}
+    .entry{background:#FBFBF8; border:1px solid #C8D0C0; border-left:4px solid #2F6F9E; border-radius:3px; padding:22px 24px; margin-bottom:24px;}
+    .entry .stamp{font-family:monospace; font-size:11px; color:#495650; margin-bottom:2px;}
+    .entry h3{margin:0 0 4px;}
+    table{border-collapse:collapse; width:100%; font-size:13px;}
+    th,td{padding:7px 10px; border-bottom:1px solid #C8D0C0; text-align:left;}
+    th{font-family:monospace; font-size:11px; text-transform:uppercase; color:#495650;}
+    td.num, th.num{font-family:monospace; text-align:right;}
+    .verdict{background:#E4EDE7; border-radius:3px; padding:10px 14px; font-size:13.5px; margin:14px 0; color:#1F4B3F; font-weight:500;}
+    .stat-tiles{display:flex; gap:10px; flex-wrap:wrap; margin:14px 0;}
+    .stat-tile{background:#FBFBF8; border:1px solid #C8D0C0; border-radius:3px; padding:10px 12px;}
+    .stat-tile .k{font-family:monospace; font-size:10.5px; text-transform:uppercase; color:#495650;}
+    .stat-tile .v{font-family:monospace; font-size:17px;}
+    .row{display:flex; gap:24px; flex-wrap:wrap; margin-top:14px;}
+    .row > div{flex:1; min-width:260px;}
+    .table-wrap{background:#FBFBF8; border:1px solid #C8D0C0; border-radius:3px; overflow:auto;}
+    @media print{ body{background:#fff;} }
+  `;
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Fieldnotes report</title><style>${reportCSS}</style></head><body>
+    <h1>Fieldnotes — analysis report</h1>
+    <p class="meta">Generated ${new Date().toLocaleString()}${state.userGoal ? ' · Goal: "'+state.userGoal.replace(/"/g,'&quot;')+'"' : ''}</p>
+    ${clone.innerHTML}
+  </body></html>`;
+
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'fieldnotes-report.html';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+document.getElementById('downloadReportBtn').addEventListener('click', downloadReport);
+</script>
+</body>
+</html>
